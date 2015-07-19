@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<meta charset="utf-8">
+<head>
+<title>Delhi Traffic</title>
+<script src="assets/libraries/d3.v3.min.js"></script>
+<script src="assets/libraries/topojson.v1.min.js"></script>
+<script src="assets/libraries/queue.v1.min.js"></script>
+
+
+<style>
+
+#mapContainer {
+
+}
+</style>
+</head>
+
+<body>
+<div id="main">
+	<div id="mapContainer"></div>
+</div>
+</body>
+
+<script>
+//DATA PROCESSING FUNCTIONS
+
+//THE DATA QUEUE
+queue()
+	.defer(d3.json, "assets/maps/delhi_faridabad_roads_of_interest.json")
+	.defer(d3.json, "assets/maps/delhi_faridabad_grid_8x8.json") //the map
+	.await(ready);
+
+//THE FUNCTION THAT CALLS THE OTHER DRAW FUNCTIONS
+function ready(error,road_json,grid_json) {
+	drawChart(road_json,grid_json);
+}
+
+//THE FUNCTION THAT DRAWS THE MAP AND THE LEGEND
+function drawChart(road_json,grid_json){
+	//CREATING FUNCTIONS USED FOR THIS CHART
+
+	scaleFactor = 200;
+	aspectFactor = .8282836706696182;
+
+	chartSize = {height:scaleFactor*4,width:scaleFactor*aspectFactor*6};
+	mapSize = {height:scaleFactor,width:scaleFactor*aspectFactor}
+
+  	var chartSvg = d3.select('#mapContainer').append('svg')
+        .attr({
+          height: chartSize.height,
+          width: chartSize.width
+        })
+        .attr("id", "svg")
+
+	for (var i=0; i<6; i++) {
+		for (var j=0; j<4; j++) {
+			drawMap(i,j);
+		}
+	}
+	function drawMap(i,j) {
+		var map = chartSvg.append('g')
+    	  .attr({
+	          height: mapSize.height,
+	          width: mapSize.width,
+	          transform: "translate("+scaleFactor*i*aspectFactor+","+scaleFactor*j+")"
+	    })
+    	// map.append('rect')
+    	// 	.attr({
+	    //       height: mapSize.height,
+	    //       width: mapSize.width
+	    //     })
+	    //     .style('fill','none')
+	    //     .style('stroke-width','1px')
+	    //     .style('stroke','black')
+
+		// var bounds = setBins(max,min);
+
+		// var colorArray = ['rgb(255,51,51)','rgb(200,30,100)','rgb(130,15,150)','rgb(60,5,200)','rgb(0,0,255)'];
+
+		// var color = d3.scale.threshold()
+		// 	.domain(bounds)
+		// 	.range(colorArray);
+
+		//DEFINING THE MAPPING VARIABLES
+		var projection = d3.geo.mercator()
+			.center([0,0])
+			.scale(1)
+			.translate([mapSize.width/2,mapSize.height/2])
+
+		var path = d3.geo.path()
+			.projection(projection);
+
+		var x_array = [];
+		var y_array = [];
+		grid_json.features.forEach(function(d) {
+			d.geometry.coordinates[0].forEach(function(e) {
+				x_array.push(e[0]);
+				y_array.push(e[1]);
+			});
+		});
+
+		var bounds = [projection([d3.min(x_array),d3.max(y_array)]),projection([d3.max(x_array),d3.min(y_array)])]
+		var dx = bounds[1][0] - bounds[0][0];
+		var dy = bounds[1][1] - bounds[0][1];
+		var x = (bounds[0][0] + bounds[1][0]) / 2;
+		var y = (bounds[0][1] + bounds[1][1]) / 2;
+		var scale = (1 / d3.max([dx / mapSize.width, dy / mapSize.height]));
+		var center = projection.invert([x,y]);
+
+		var projection = d3.geo.mercator()
+			.center(center)
+			.scale(scale)
+			.translate([mapSize.width/2,mapSize.height/2])
+
+		var path = d3.geo.path().projection(projection);
+
+		map.append("clipPath")
+		.attr('id', 'mapclip')
+		.append('rect')
+		.attr("x", 0)
+		.attr("width", mapSize.width)
+		.attr("y", 0)
+		.attr("height", mapSize.height);
+
+		//DRAWING THE ROADS
+		var roads = map.selectAll('roads')
+		.data(road_json.features)
+		.enter()
+		.append('path')
+		.attr({
+			d: path,
+			'class': 'roads'
+		})
+		.style('stroke', function(d) { 
+			if (d.properties.type!='tertiary') {
+				return 'black'
+			}
+		})
+		.style('stroke-width','.25px')
+		.style('fill','none')
+		.attr("clip-path","url(#mapclip)")
+
+		//DRAWING THE ROADS
+		var grid = map.selectAll('grid_squares')
+			.data(grid_json.features)
+			.enter()
+			.append('path')
+			.attr({
+				d: path,
+				'class': 'grid_squares'
+			})
+			.style('stroke','black')
+			.style('stroke-width','.25px')
+			.style('fill','none')
+
+	}
+	    
+}
+
+</script>
+</html>
