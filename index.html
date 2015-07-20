@@ -23,6 +23,16 @@
 	stroke-width:1px;
 	stroke:black;
 }
+.roads {
+	stroke-width:.5px;
+	fill:none;
+}
+.gridSquares {
+	stroke:white;
+	stroke-opacity:1;
+	stroke-width:.25px;
+	fill-opacity:.8;
+}
 </style>
 </head>
 
@@ -60,7 +70,7 @@ queue()
 
 //THE FUNCTION THAT CALLS THE OTHER DRAW FUNCTIONS
 function ready(error,road_json,grid_topo,cong_data) {
-	drawChart(road_json,grid_json,grid_topo,cong_data);
+	drawChart(road_json,grid_topo,cong_data);
 }
 
 //THE FUNCTION THAT DRAWS THE MAP AND THE LEGEND
@@ -173,23 +183,17 @@ function drawChart(road_json,grid_topo,cong_data){
 				return 'black'
 			}
 		})
-		.style('stroke-width','.5px')
-		.style('fill','none')
 		.attr("clip-path","url(#mapclip)")
 
 		//DRAWING THE GRID
-		var grid = map.selectAll('grid_squares')
+		var grid = map.selectAll('gridSquares')
 			.data(grid_json.features)
 			.enter()
 			.append('path')
 			.attr({
 				d: path,
-				'class': 'grid_squares'
+				'class': 'gridSquares'
 			})
-			.style('stroke','white')
-			.style('stroke-opacity',1)
-			.style('stroke-width','.25px')
-			.style('fill-opacity','.8')
 			.style('fill',function(d) { 
 				var t = ((j*6)+i);
 				var x = d.properties.grid_square[0];
