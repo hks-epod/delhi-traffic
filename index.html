@@ -9,9 +9,19 @@
 
 
 <style>
-
-#mapContainer {
-
+.timeText {
+    stroke: black;
+    stroke-width: 1px;
+    stroke-linecap: butt;
+    stroke-linejoin: miter;
+	font-size:14px;
+	font-family:"Times New Roman";
+	paint-order: stroke;
+}
+.mapRect {
+	fill:none;
+	stroke-width:1px;
+	stroke:black;
 }
 </style>
 </head>
@@ -24,34 +34,59 @@
 
 <script>
 //DATA PROCESSING FUNCTIONS
-
+function processCong(d, i) { //formats price data for the MAP AND LINE
+	function deString(d) {
+		if (d==="") {
+			return NaN;
+		} else {
+			return +d;
+		}
+	}
+	var array = {
+		hourly_tot_cong: deString(d.hourly_tot_cong),
+		origin_square: d.origin_square,
+		origin_x: deString(d.origin_square.split(",")[0].replace("(","")),
+		origin_y: deString(d.origin_square.split(",")[1].replace(")","")),
+		period: deString(d.period)
+	};
+	return array;
+}
 //THE DATA QUEUE
 queue()
 	.defer(d3.json, "assets/maps/delhi_faridabad_roads_of_interest.json")
-	.defer(d3.json, "assets/maps/delhi_faridabad_grid_8x8.json") //the map
+	.defer(d3.json, "assets/maps/grid-square-topo.json")
+	.defer(d3.csv, "assets/data/hourly_cong_diff.csv", processCong)
 	.await(ready);
 
 //THE FUNCTION THAT CALLS THE OTHER DRAW FUNCTIONS
-function ready(error,road_json,grid_json) {
-	drawChart(road_json,grid_json);
+function ready(error,road_json,grid_topo,cong_data) {
+	drawChart(road_json,grid_json,grid_topo,cong_data);
 }
 
 //THE FUNCTION THAT DRAWS THE MAP AND THE LEGEND
-function drawChart(road_json,grid_json){
+function drawChart(road_json,grid_topo,cong_data){
 	//CREATING FUNCTIONS USED FOR THIS CHART
 
+	var grid_json = topojson.feature(grid_topo, grid_topo.objects.delhi_faridabad_grid_8x8)
 	scaleFactor = 200;
 	aspectFactor = .8282836706696182;
 
 	chartSize = {height:scaleFactor*4,width:scaleFactor*aspectFactor*6};
 	mapSize = {height:scaleFactor,width:scaleFactor*aspectFactor}
+	chartMargin = 10;
 
-  	var chartSvg = d3.select('#mapContainer').append('svg')
+  	var chartG = d3.select('#mapContainer').append('svg')
         .attr({
-          height: chartSize.height,
-          width: chartSize.width
+          height: chartSize.height+(2*chartMargin),
+          width: chartSize.width+(2*chartMargin)
         })
         .attr("id", "svg")
+        .append('g')
+        .attr({
+          height: chartSize.height,
+          width: chartSize.width,
+          transform: "translate("+chartMargin+","+chartMargin+")"
+        })
 
 	for (var i=0; i<6; i++) {
 		for (var j=0; j<4; j++) {
@@ -59,28 +94,29 @@ function drawChart(road_json,grid_json){
 		}
 	}
 	function drawMap(i,j) {
-		var map = chartSvg.append('g')
+		var map = chartG.append('g')
     	  .attr({
 	          height: mapSize.height,
 	          width: mapSize.width,
 	          transform: "translate("+scaleFactor*i*aspectFactor+","+scaleFactor*j+")"
 	    })
-    	// map.append('rect')
-    	// 	.attr({
-	    //       height: mapSize.height,
-	    //       width: mapSize.width
-	    //     })
-	    //     .style('fill','none')
-	    //     .style('stroke-width','1px')
-	    //     .style('stroke','black')
 
-		// var bounds = setBins(max,min);
+		function setBins(max,min) {// calculates the bins for the color domain in the map
+			var bounds = [];
+			for (var i=1;i<=8;i++) { // create 5 equally sized bins between min*.95 and max*1.05
+				bounds.push(min*.99+(((max*1.01)-(min*.99))*(i/8)));
+			}
+			return bounds;
+		}
 
-		// var colorArray = ['rgb(255,51,51)','rgb(200,30,100)','rgb(130,15,150)','rgb(60,5,200)','rgb(0,0,255)'];
+		var bounds = setBins(d3.max(cong_data.map(function(d) {return d.hourly_tot_cong})),d3.min(cong_data.map(function(d) {return d.hourly_tot_cong})));
 
-		// var color = d3.scale.threshold()
-		// 	.domain(bounds)
-		// 	.range(colorArray);
+		var colorArray = ['rgb(215,48,39)','rgb(244,109,67)','rgb(253,174,97)','rgb(254,224,139)','rgb(217,239,139)','rgb(166,217,106)','rgb(102,189,99)','rgb(26,152,80)']
+		colorArray.reverse()
+
+		var color = d3.scale.threshold()
+			.domain(bounds)
+			.range(colorArray);
 
 		//DEFINING THE MAPPING VARIABLES
 		var projection = d3.geo.mercator()
@@ -137,11 +173,11 @@ function drawChart(road_json,grid_json){
 				return 'black'
 			}
 		})
-		.style('stroke-width','.25px')
+		.style('stroke-width','.5px')
 		.style('fill','none')
 		.attr("clip-path","url(#mapclip)")
 
-		//DRAWING THE ROADS
+		//DRAWING THE GRID
 		var grid = map.selectAll('grid_squares')
 			.data(grid_json.features)
 			.enter()
@@ -150,9 +186,42 @@ function drawChart(road_json,grid_json){
 				d: path,
 				'class': 'grid_squares'
 			})
-			.style('stroke','black')
+			.style('stroke','white')
+			.style('stroke-opacity',1)
 			.style('stroke-width','.25px')
-			.style('fill','none')
+			.style('fill-opacity','.8')
+			.style('fill',function(d) { 
+				var t = ((j*6)+i);
+				var x = d.properties.grid_square[0];
+				var y = d.properties.grid_square[1];
+				var val = cong_data.filter(function(e) {return e.period===t && x===e.origin_x && y===e.origin_y})[0]['hourly_tot_cong'];
+				if (isNaN(val)) {
+					return none;
+				}
+				else {
+					return color(val);
+				}
+				
+			})
+    	map.append('rect')
+    		.attr({
+	          height: mapSize.height,
+	          width: mapSize.width,
+	          class:'mapRect'
+	        })
+
+	    var time = ((j*6)+i);
+	    if (time>9) {
+	    	time = time+":30";
+	    }
+	    else {
+	    	time = "0"+time+":30";
+	    }
+	    map.append('text')
+	    	.attr('x',scaleFactor*aspectFactor*.78)
+	    	.attr('y',scaleFactor*.085)
+	    	.attr('class','timeText')
+	        .text(time)
 
 	}
 	    
